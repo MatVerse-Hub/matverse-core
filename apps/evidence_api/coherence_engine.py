@@ -38,7 +38,8 @@ class CoherenceEngine:
         norm = float(np.linalg.norm(vec))
         if norm == 0.0:
             # Evita divisão por zero: vetor nulo vira vetor uniforme
-            return np.ones_like(vec) / np.sqrt(vec.size or 1)
+            size = int(vec.size or 1)
+            return np.ones(size, dtype=float) / np.sqrt(size)
         return vec / norm
 
     @staticmethod

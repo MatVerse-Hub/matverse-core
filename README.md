@@ -90,6 +90,10 @@ Pré-requisitos:
 ```
 
 A API ficará acessível em `http://localhost:8000`.
+Você pode inspecionar a documentação automática em:
+
+- `http://localhost:8000/docs`
+- `http://localhost:8000/redoc`
 
 ---
 ## Endpoints
@@ -144,8 +148,12 @@ Resposta (exemplo):
 
 Erros comuns:
 
-- Vetor com dimensão diferente do esperado (atualmente 5) → HTTP 400.
-- Vetores vazios ou com dados incompatíveis → HTTP 400.
+- **Dimensão errada do vetor**
+  - Esperado: vetor com 5 posições (por causa do seed interno ρ_ext).
+  - Se enviar outro tamanho → HTTP 400 com mensagem explicando a dimensão esperada.
+
+- **Vetores vazios ou inválidos**
+  - O motor lança `ValueError`; a API traduz para HTTP 400 com o motivo.
 
 ---
 ## Testes
