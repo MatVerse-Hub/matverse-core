@@ -1,96 +1,114 @@
-"""Utilities for computing MatVerse coherence metrics.
+"""Coherence Engine – implementação prática da M-CSQI.
 
-This module simulates the Metric of Invariant Quantum Semantic Coherence (M-CSQI)
-using lightweight numerical operations. It exposes helpers for the Uhlmann fidelity,
-a relative-entropy proxy, and a combined Ψ-Index that rewards semantic coherence and
-penalizes divergence according to the sovereign constant λ.
+Modelo utilizado:
+    Ψ = F(ρ_int, ρ_ext) - λ · S(ρ_int || ρ_ext)
+
+onde:
+    F  ~ similaridade (coerência)   → usamos similaridade de cosseno.
+    S  ~ penalidade entrópica       → usamos distância euclidiana normalizada.
+    λ  = 0.27 (Constante Civilizacional, fixa).
+
+Este módulo **não depende** de FastAPI: é puro Python + NumPy.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Tuple
-
 import numpy as np
 
-# Civilizational constant defined by the protocol (penalty multiplier)
+# Constante Civilizacional (Multiplicador de Landau-Entropia)
 LAMBDA_SOVEREIGN: float = 0.27
-# Ethical threshold for coherence approval (Ω-GATE)
+
+# Limiar ético default para aprovação pelo Ω-GATE
 PSI_ETHICAL_THRESHOLD: float = 0.85
 
 
-@dataclass
-class CoherenceBreakdown:
-    """Container for the intermediate coherence calculations."""
-
-    fidelity: float
-    entropy_penalty: float
-    psi_index: float
-
-
 class CoherenceEngine:
-    """Compute coherence measures between intent and external state vectors."""
+    """Motor de Coerência Semântica Quântica Invariante (M-CSQI).
+
+    Na prática:
+    - recebe dois vetores np.ndarray normalizados (ρ_int e ρ_ext);
+    - calcula F (coerência) via similaridade de cosseno;
+    - calcula S (penalidade entrópica) via distância euclidiana normalizada;
+    - combina tudo em um Ψ ∈ [0, 1].
+    """
+
+    @staticmethod
+    def _normalize(vec: np.ndarray) -> np.ndarray:
+        vec = np.asarray(vec, dtype=float)
+        norm = float(np.linalg.norm(vec))
+        if norm == 0.0:
+            # Evita divisão por zero: vetor nulo vira vetor uniforme
+            return np.ones_like(vec) / np.sqrt(vec.size or 1)
+        return vec / norm
 
     @staticmethod
     def uhlmann_fidelity(rho_int: np.ndarray, rho_ext: np.ndarray) -> float:
-        """Approximate the Uhlmann fidelity between two density vectors.
+        """Aproximação prática da Fidelidade de Uhlmann.
 
-        The formal fidelity is ``(Tr[sqrt(sqrt(ρ1) * ρ2 * sqrt(ρ1))])**2``. For a
-        lightweight simulation we use cosine similarity, which is bounded between
-        0 and 1 after clipping.
+        Formalmente:
+            F(ρ1, ρ2) = (Tr[sqrt(sqrt(ρ1) ρ2 sqrt(ρ1))])²
+
+        Aqui usamos similaridade de cosseno entre vetores normalizados como
+        aproximação computacional simples e estável.
         """
+        rho_int_n = CoherenceEngine._normalize(rho_int)
+        rho_ext_n = CoherenceEngine._normalize(rho_ext)
 
-        similarity = float(
-            np.dot(rho_int, rho_ext)
-            / (np.linalg.norm(rho_int) * np.linalg.norm(rho_ext))
-        )
-        return float(np.clip(similarity, 0.0, 1.0))
+        dot = float(np.dot(rho_int_n, rho_ext_n))
+        # Clip para [0, 1] garantindo interpretação probabilística
+        return float(np.clip(dot, 0.0, 1.0))
 
     @staticmethod
     def relative_entropy(rho_int: np.ndarray, rho_ext: np.ndarray) -> float:
-        """Proxy for the relative entropy between two density vectors.
+        """Penalidade entrópica S(ρ_int || ρ_ext).
 
-        The true quantity is ``Tr[ρ * (log ρ - log σ)]``. We approximate it with a
-        smooth distance-derived penalty so callers can reason about divergence
-        without heavy linear-algebra dependencies. The penalty is normalized to
-        the range [0, 1).
+        Em vez da fórmula exata de entropia relativa, usamos uma métrica
+        geométrica controlada:
+
+            distance = ||ρ_int - ρ_ext||_2
+            penalty  = 1 - exp(-0.5 · distance)
+
+        Isso mantém S ∈ [0, 1) e cresce com a incoerência.
         """
+        rho_int_n = CoherenceEngine._normalize(rho_int)
+        rho_ext_n = CoherenceEngine._normalize(rho_ext)
 
-        distance = float(np.linalg.norm(rho_int - rho_ext))
-        penalty_factor = 1.0 - float(np.exp(-0.5 * distance))
-        return float(np.clip(penalty_factor, 0.0, 1.0))
+        distance = float(np.linalg.norm(rho_int_n - rho_ext_n))
+        penalty = 1.0 - float(np.exp(-0.5 * distance))
+        # Garantia numérica
+        return float(np.clip(penalty, 0.0, 1.0))
 
     @classmethod
     def calculate_psi_index(
-        cls, intent_vector: np.ndarray, external_vector: np.ndarray
-    ) -> CoherenceBreakdown:
-        """Compute the Ψ-Index via M-CSQI.
+        cls,
+        intent_vector: np.ndarray,
+        external_vector: np.ndarray,
+        lambda_sovereign: float = LAMBDA_SOVEREIGN,
+    ) -> float:
+        """Calcula o Ψ-Index conforme M-CSQI.
 
-        Ψ = F(ρ_int, ρ_ext) - λ * S(ρ_int || ρ_ext)
+        Ψ = F(ρ_int, ρ_ext) - λ · S(ρ_int || ρ_ext)
         """
-
         fidelity = cls.uhlmann_fidelity(intent_vector, external_vector)
         entropy_penalty = cls.relative_entropy(intent_vector, external_vector)
-        psi_index = fidelity - (LAMBDA_SOVEREIGN * entropy_penalty)
-        psi_index = float(np.clip(psi_index, 0.0, 1.0))
-        return CoherenceBreakdown(
-            fidelity=fidelity, entropy_penalty=entropy_penalty, psi_index=psi_index
-        )
+
+        psi = fidelity - (lambda_sovereign * entropy_penalty)
+        return float(np.clip(psi, 0.0, 1.0))
 
     @classmethod
-    def get_coherence_status(cls, psi_index: float) -> str:
-        """Return a human-readable coherence classification."""
-
-        if psi_index >= PSI_ETHICAL_THRESHOLD:
+    def get_coherence_status(
+        cls,
+        psi_index: float,
+        threshold: float = PSI_ETHICAL_THRESHOLD,
+    ) -> str:
+        """Retorna o status qualitativo do Ω-GATE para um dado Ψ."""
+        if psi_index >= threshold:
             return "COERENTE (Ω-GATE: Aprovado)"
         return "INCOERENTE (Ω-GATE: Penalidade Ativada)"
 
-    @classmethod
-    def evaluate(
-        cls, intent_vector: np.ndarray, external_vector: np.ndarray
-    ) -> Tuple[CoherenceBreakdown, str]:
-        """Full coherence evaluation with status label."""
 
-        breakdown = cls.calculate_psi_index(intent_vector, external_vector)
-        status = cls.get_coherence_status(breakdown.psi_index)
-        return breakdown, status
+if __name__ == "__main__":  # debug rápido
+    ext = np.array([0.92, 0.15, 0.60, 0.88, 0.05])
+    intent = ext.copy()
+    psi = CoherenceEngine.calculate_psi_index(intent, ext)
+    print(f"Ψ(ext, ext) = {psi:.4f}")

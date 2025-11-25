@@ -1,1 +1,1 @@
-"""Application package for MatVerse services."""
+"""Namespace raiz para apps do MatVerse Core."""

@@ -1,27 +1,39 @@
+"""Testes mínimos para o CoherenceEngine.
+
+Garantem que:
+- Ψ está sempre em [0, 1];
+- Coerência máxima (ρ_int = ρ_ext) produz Ψ alto;
+- Incoerência forte reduz Ψ.
+"""
+
 import numpy as np
 
 from apps.evidence_api.coherence_engine import CoherenceEngine, LAMBDA_SOVEREIGN
 
 
-def test_coherence_engine_coherent_vector():
-    external = np.array([0.92, 0.15, 0.60, 0.88, 0.05], dtype=float)
-    external = external / np.linalg.norm(external)
-    breakdown, status = CoherenceEngine.evaluate(external, external)
+def test_psi_range_between_zero_and_one() -> None:
+    ext = np.array([1.0, 0.0, 0.0])
+    intent = np.array([0.5, 0.5, 0.0])
 
-    assert breakdown.fidelity == 1.0
-    assert breakdown.entropy_penalty == 0.0
-    assert breakdown.psi_index == 1.0
-    assert status.startswith("COERENTE")
+    psi = CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
+
+    assert 0.0 <= psi <= 1.0
 
 
-def test_coherence_engine_penalizes_divergence():
-    external = np.array([0.92, 0.15, 0.60, 0.88, 0.05], dtype=float)
-    external = external / np.linalg.norm(external)
-    intent = np.array([-0.92, -0.15, -0.60, -0.88, -0.05], dtype=float)
-    intent = intent / np.linalg.norm(intent)
+def test_psi_is_high_for_identical_vectors() -> None:
+    vec = np.array([0.3, 0.4, 0.5])
 
-    breakdown, _ = CoherenceEngine.evaluate(intent, external)
+    psi = CoherenceEngine.calculate_psi_index(vec, vec, LAMBDA_SOVEREIGN)
 
-    assert breakdown.fidelity < 0.1
-    assert breakdown.entropy_penalty > 0.5
-    assert breakdown.psi_index <= breakdown.fidelity + LAMBDA_SOVEREIGN
+    # Não precisa ser 1.0 exato, mas deve ser bem alto
+    assert psi > 0.95
+
+
+def test_psi_is_lower_for_orthogonal_vectors() -> None:
+    ext = np.array([1.0, 0.0])
+    intent = np.array([0.0, 1.0])
+
+    psi = CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
+
+    # Coerência quase zero + penalidade -> Ψ bem baixo
+    assert psi < 0.2

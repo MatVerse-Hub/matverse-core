@@ -1,4 +1,15 @@
-"""FastAPI service exposing the Evidence endpoint for MatVerse."""
+"""FastAPI – Evidence API do MatVerse Core.
+
+Este serviço expõe o endpoint principal:
+
+    POST /evidence
+
+que recebe uma intenção (texto + vetor) e devolve uma Evidence Note com:
+    - hash SHA-256 do payload (PoSE/PoLE light);
+    - Ψ calculado em tempo real via M-CSQI;
+    - λ soberano (0.27);
+    - status qualitativo do Ω-GATE.
+"""
 
 from __future__ import annotations
 
@@ -11,110 +22,133 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .coherence_engine import (
+    CoherenceEngine,
     LAMBDA_SOVEREIGN,
     PSI_ETHICAL_THRESHOLD,
-    CoherenceBreakdown,
-    CoherenceEngine,
 )
 
+
 app = FastAPI(
-    title="MatVerse-Core Evidence API",
+    title="MatVerse Core – Evidence API",
     description=(
-        "Endpoints de Prova Computacional Quântica usando a Métrica de Coerência "
-        "Semântica Quântica Invariante (M-CSQI)."
+        "M-CSQI engine: calcula Ψ em tempo real a partir de vetores "
+        "de intenção e de realidade externa."
     ),
+    version="0.1.0",
 )
+
+
+# -----------------
+# Modelos Pydantic
+# -----------------
 
 
 class EvidenceRequest(BaseModel):
-    """Entrada da intenção do usuário e seu vetor semântico."""
+    """Payload básico de uma intenção a ser avaliada.
 
-    intent: str = Field(..., description="Intenção declarada pelo usuário.")
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Metadados opcionais da Evidence Note."
-    )
+    *intent*: texto livre (para logging futuro / embeddings reais).
+    *intent_vector*: vetor numérico representando ρ_int.
+    """
+
+    intent: str = Field(..., min_length=1, description="Texto bruto da intenção")
     intent_vector: List[float] = Field(
-        ..., description="Vetor semântico normalizado representando ρ_int."
+        ...,
+        description="Vetor numérico representando o estado semântico da intenção.",
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadados opcionais (origem, tags, etc.)",
     )
 
 
 class EvidenceNote(BaseModel):
-    """Estrutura de resposta para a Evidence Note registrada."""
+    """Registro mínimo de uma Evidence Note."""
 
     timestamp: float
     hash_sha256: str
     psi_index: float
-    fidelity: float
-    entropy_penalty: float
     lambda_sovereign: float
     status: str
     message: str
 
 
-# --- Simulação do estado externo de coerência (ρ_ext) ---
-EXTERNAL_COHERENCE_VECTOR = np.array([0.92, 0.15, 0.60, 0.88, 0.05], dtype=float)
-EXTERNAL_COHERENCE_VECTOR = EXTERNAL_COHERENCE_VECTOR / np.linalg.norm(
-    EXTERNAL_COHERENCE_VECTOR
-)
-VECTOR_DIMENSION = EXTERNAL_COHERENCE_VECTOR.size
+# -----------------
+# Estado Simbólico: ρ_ext
+# -----------------
+
+# Vetor de referência externo (ρ_ext). Em produção, isso deve ser derivado
+# de embeddings dos seus DOCX / corpus. Aqui deixamos um seed estável.
+_EXTERNAL_COHERENCE_VECTOR = np.array([0.92, 0.15, 0.60, 0.88, 0.05], dtype=float)
+_EXTERNAL_COHERENCE_VECTOR /= np.linalg.norm(_EXTERNAL_COHERENCE_VECTOR)
+_VECTOR_DIMENSION = int(_EXTERNAL_COHERENCE_VECTOR.size)
 
 
-def _normalize_vector(raw_vector: List[float]) -> np.ndarray:
-    """Normalize the incoming intent vector and validate its dimensionality."""
+# -----------------
+# Endpoints
+# -----------------
 
-    if len(raw_vector) != VECTOR_DIMENSION:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dimensão do intent_vector incorreta. Esperado: {VECTOR_DIMENSION}",
-        )
 
-    vector = np.array(raw_vector, dtype=float)
-    norm = np.linalg.norm(vector)
-    if norm == 0:
-        raise HTTPException(
-            status_code=400, detail="O intent_vector não pode ser o vetor nulo."
-        )
-    return vector / norm
+@app.get("/")
+async def root() -> Dict[str, Any]:
+    return {
+        "service": "matverse-core-evidence-api",
+        "version": app.version,
+        "lambda_sovereign": LAMBDA_SOVEREIGN,
+        "psi_threshold": PSI_ETHICAL_THRESHOLD,
+        "vector_dimension": _VECTOR_DIMENSION,
+    }
+
+
+@app.get("/health")
+async def health() -> Dict[str, str]:
+    return {"status": "ok", "omega_gate": "online"}
 
 
 @app.post("/evidence", response_model=EvidenceNote)
 async def create_evidence(request: EvidenceRequest) -> EvidenceNote:
-    """Gera uma Evidence Note calculando o Ψ-Index em tempo real."""
+    """Cria uma Evidence Note com Ψ calculado via M-CSQI.
 
-    rho_int = _normalize_vector(request.intent_vector)
-    breakdown, status = CoherenceEngine.evaluate(rho_int, EXTERNAL_COHERENCE_VECTOR)
+    Valida o tamanho do vetor, calcula Ψ e gera um hash estável do evento.
+    """
 
-    raw_data = f"{request.intent}{time.time()}{breakdown.psi_index}"
-    hash_value = hashlib.sha256(raw_data.encode()).hexdigest()
+    if len(request.intent_vector) != _VECTOR_DIMENSION:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Dimensão inválida para intent_vector. "
+                f"Esperado: `{_VECTOR_DIMENSION}`, recebido: `{len(request.intent_vector)}`."
+            ),
+        )
+
+    rho_int = np.asarray(request.intent_vector, dtype=float)
+
+    psi_value = CoherenceEngine.calculate_psi_index(
+        rho_int,
+        _EXTERNAL_COHERENCE_VECTOR,
+        lambda_sovereign=LAMBDA_SOVEREIGN,
+    )
+    status = CoherenceEngine.get_coherence_status(psi_value, PSI_ETHICAL_THRESHOLD)
+
+    now = time.time()
+    raw = f"{request.intent}|{request.metadata}|{psi_value:.6f}|{now:.6f}"
+    hash_value = hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     return EvidenceNote(
-        timestamp=time.time(),
+        timestamp=now,
         hash_sha256=hash_value,
-        psi_index=breakdown.psi_index,
-        fidelity=breakdown.fidelity,
-        entropy_penalty=breakdown.entropy_penalty,
+        psi_index=psi_value,
         lambda_sovereign=LAMBDA_SOVEREIGN,
         status=status,
-        message=(
-            "Evidence Note registrada com a Métrica de Coerência Semântica "
-            "Quântica Invariante."
-        ),
+        message="Evidence Note registrada com M-CSQI.",
     )
 
 
-@app.get("/health")
-async def healthcheck() -> Dict[str, Any]:
-    """Retorna informações básicas sobre o serviço e a dimensão semântica."""
-
-    return {
-        "status": "ok",
-        "lambda": LAMBDA_SOVEREIGN,
-        "psi_threshold": PSI_ETHICAL_THRESHOLD,
-        "vector_dimension": VECTOR_DIMENSION,
-    }
-
-
-if __name__ == "__main__":
+if __name__ == "__main__":  # execução direta local
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("--- MatVerse Core – Evidence API ---")
+    print(f"λ (LAMBDA_SOVEREIGN): {LAMBDA_SOVEREIGN}")
+    print(f"Ψ_threshold: {PSI_ETHICAL_THRESHOLD}")
+    print(f"Dimensão vetorial: {_VECTOR_DIMENSION}")
+
+    uvicorn.run("apps.evidence_api.main:app", host="0.0.0.0", port=8000, reload=True)
