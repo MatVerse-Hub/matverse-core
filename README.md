@@ -160,7 +160,8 @@ Os testes verificam que:
 
 - Ψ sempre cai em `[0, 1]`;
 - vetores idênticos produzem alta coerência (Ψ ≈ 1);
-- vetores ortogonais produzem Ψ baixo.
+- vetores ortogonais produzem Ψ baixo;
+- vetores vazios ou com dimensões diferentes disparam `ValueError`.
 
 ---
 ## Próximos Passos (Roadmap técnico)

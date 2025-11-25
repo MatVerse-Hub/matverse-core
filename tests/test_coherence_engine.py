@@ -3,7 +3,8 @@
 Garantem que:
 - Ψ está sempre em [0, 1];
 - Coerência máxima (ρ_int = ρ_ext) produz Ψ alto;
-- Incoerência forte reduz Ψ.
+- Incoerência forte reduz Ψ;
+- entradas vazias ou com dimensões incompatíveis disparam erro.
 """
 
 import numpy as np
