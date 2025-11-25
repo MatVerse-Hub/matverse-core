@@ -4,10 +4,11 @@ Garantem que:
 - Ψ está sempre em [0, 1];
 - Coerência máxima (ρ_int = ρ_ext) produz Ψ alto;
 - Incoerência forte reduz Ψ;
-- entradas vazias ou com dimensões incompatíveis disparam erro.
+- entradas vazias ou com dimensões incompatíveis disparam ``ValueError``.
 """
 
 import numpy as np
+import pytest
 
 from apps.evidence_api.coherence_engine import CoherenceEngine, LAMBDA_SOVEREIGN
 
@@ -44,21 +45,13 @@ def test_mismatched_dimensions_raise_value_error() -> None:
     ext = np.array([1.0, 0.0])
     intent = np.array([0.5, 0.5, 0.5])
 
-    try:
+    with pytest.raises(ValueError, match="mesma dimensão"):
         CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
-    except ValueError as exc:  # pragma: no cover - simple guard
-        assert "mesma dimensão" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("Esperava ValueError para vetores de tamanhos diferentes")
 
 
 def test_empty_vectors_raise_value_error() -> None:
     ext = np.array([])
     intent = np.array([])
 
-    try:
+    with pytest.raises(ValueError, match="não podem ser vazios"):
         CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
-    except ValueError as exc:  # pragma: no cover
-        assert "não podem ser vazios" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("Esperava ValueError para vetores vazios")
