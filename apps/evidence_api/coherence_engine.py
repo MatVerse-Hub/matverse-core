@@ -89,8 +89,19 @@ class CoherenceEngine:
 
         Ψ = F(ρ_int, ρ_ext) - λ · S(ρ_int || ρ_ext)
         """
-        fidelity = cls.uhlmann_fidelity(intent_vector, external_vector)
-        entropy_penalty = cls.relative_entropy(intent_vector, external_vector)
+        intent_arr = np.asarray(intent_vector, dtype=float)
+        external_arr = np.asarray(external_vector, dtype=float)
+
+        if intent_arr.size == 0 or external_arr.size == 0:
+            raise ValueError("Os vetores ρ_int e ρ_ext não podem ser vazios.")
+        if intent_arr.shape != external_arr.shape:
+            raise ValueError(
+                "Os vetores ρ_int e ρ_ext precisam ter a mesma dimensão "
+                f"(recebido {intent_arr.shape} vs {external_arr.shape})."
+            )
+
+        fidelity = cls.uhlmann_fidelity(intent_arr, external_arr)
+        entropy_penalty = cls.relative_entropy(intent_arr, external_arr)
 
         psi = fidelity - (lambda_sovereign * entropy_penalty)
         return float(np.clip(psi, 0.0, 1.0))

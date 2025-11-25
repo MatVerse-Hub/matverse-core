@@ -142,6 +142,11 @@ Resposta (exemplo):
 }
 ```
 
+Erros comuns:
+
+- Vetor com dimensão diferente do esperado (atualmente 5) → HTTP 400.
+- Vetores vazios ou com dados incompatíveis → HTTP 400.
+
 ---
 ## Testes
 

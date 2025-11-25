@@ -122,11 +122,14 @@ async def create_evidence(request: EvidenceRequest) -> EvidenceNote:
 
     rho_int = np.asarray(request.intent_vector, dtype=float)
 
-    psi_value = CoherenceEngine.calculate_psi_index(
-        rho_int,
-        _EXTERNAL_COHERENCE_VECTOR,
-        lambda_sovereign=LAMBDA_SOVEREIGN,
-    )
+    try:
+        psi_value = CoherenceEngine.calculate_psi_index(
+            rho_int,
+            _EXTERNAL_COHERENCE_VECTOR,
+            lambda_sovereign=LAMBDA_SOVEREIGN,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     status = CoherenceEngine.get_coherence_status(psi_value, PSI_ETHICAL_THRESHOLD)
 
     now = time.time()
