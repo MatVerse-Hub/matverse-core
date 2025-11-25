@@ -1,0 +1,57 @@
+"""Testes mínimos para o CoherenceEngine.
+
+Garantem que:
+- Ψ está sempre em [0, 1];
+- Coerência máxima (ρ_int = ρ_ext) produz Ψ alto;
+- Incoerência forte reduz Ψ;
+- entradas vazias ou com dimensões incompatíveis disparam ``ValueError``.
+"""
+
+import numpy as np
+import pytest
+
+from apps.evidence_api.coherence_engine import CoherenceEngine, LAMBDA_SOVEREIGN
+
+
+def test_psi_range_between_zero_and_one() -> None:
+    ext = np.array([1.0, 0.0, 0.0])
+    intent = np.array([0.5, 0.5, 0.0])
+
+    psi = CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
+
+    assert 0.0 <= psi <= 1.0
+
+
+def test_psi_is_high_for_identical_vectors() -> None:
+    vec = np.array([0.3, 0.4, 0.5])
+
+    psi = CoherenceEngine.calculate_psi_index(vec, vec, LAMBDA_SOVEREIGN)
+
+    # Não precisa ser 1.0 exato, mas deve ser bem alto
+    assert psi > 0.95
+
+
+def test_psi_is_lower_for_orthogonal_vectors() -> None:
+    ext = np.array([1.0, 0.0])
+    intent = np.array([0.0, 1.0])
+
+    psi = CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
+
+    # Coerência quase zero + penalidade -> Ψ bem baixo
+    assert psi < 0.2
+
+
+def test_mismatched_dimensions_raise_value_error() -> None:
+    ext = np.array([1.0, 0.0])
+    intent = np.array([0.5, 0.5, 0.5])
+
+    with pytest.raises(ValueError, match="mesma dimensão"):
+        CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
+
+
+def test_empty_vectors_raise_value_error() -> None:
+    ext = np.array([])
+    intent = np.array([])
+
+    with pytest.raises(ValueError, match="não podem ser vazios"):
+        CoherenceEngine.calculate_psi_index(intent, ext, LAMBDA_SOVEREIGN)
